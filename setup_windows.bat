@@ -22,7 +22,7 @@ if errorlevel 1 goto :fail
 python -m pip install -r requirements.txt
 if errorlevel 1 goto :fail
 set PYTHONPATH=%CD%\src
-python -c "import streamlit,moviepy,PIL,numpy,imageio_ffmpeg,edge_tts,faster_whisper; from reels_ai.utils import configure_moviepy; print('FFmpeg:', configure_moviepy())"
+python -c "import streamlit,PIL,imageio_ffmpeg,edge_tts,faster_whisper; from reels_ai.utils import ffmpeg_executable; print('FFmpeg:', ffmpeg_executable())"
 if errorlevel 1 goto :fail
 echo.
 echo SUCCESS: REELS AI is ready. Double-click start_reels_ai.bat.
@@ -33,4 +33,3 @@ echo.
 echo ERROR: Setup failed. Review the message above and output\reels_ai.log if present.
 pause
 exit /b 1
-

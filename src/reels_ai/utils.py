@@ -5,6 +5,7 @@ import logging
 import re
 import shutil
 import os
+import subprocess
 from pathlib import Path
 
 from PIL import Image
@@ -72,16 +73,16 @@ def ffmpeg_executable() -> str:
     return str(path)
 
 
-def configure_moviepy() -> str:
-    import os
-
-    exe = ffmpeg_executable()
-    os.environ["IMAGEIO_FFMPEG_EXE"] = exe
-    os.environ["FFMPEG_BINARY"] = exe
-    try:
-        from moviepy.config import change_settings
-
-        change_settings({"FFMPEG_BINARY": exe})
-    except Exception:
-        pass
-    return exe
+def media_duration(path: Path) -> float:
+    """Read media duration with FFmpeg, avoiding a second video framework."""
+    result = subprocess.run(
+        [ffmpeg_executable(), "-hide_banner", "-i", str(Path(path).resolve())],
+        capture_output=True,
+        text=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
+    if not match:
+        raise ValueError(f"Could not read the duration of {Path(path).name}.")
+    hours, minutes, seconds = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)

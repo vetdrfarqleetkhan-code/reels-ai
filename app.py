@@ -18,7 +18,7 @@ from reels_ai.generator import render_reel_fast, select_audio_source
 from reels_ai.planning import anchored_scene_timings, equal_scene_timings, timings_as_rows
 from reels_ai.preview import static_preview
 from reels_ai.storage import list_projects, load_project, save_project
-from reels_ai.utils import OUTPUT_DIR, PROJECTS_DIR, TEMP_DIR, configure_logging, ensure_directories, safe_name, sha256_bytes
+from reels_ai.utils import OUTPUT_DIR, PROJECTS_DIR, TEMP_DIR, configure_logging, ensure_directories, media_duration, safe_name, sha256_bytes
 
 ensure_directories(); log = configure_logging()
 st.set_page_config(page_title="Reels AI", page_icon="🎬", layout="wide")
@@ -170,8 +170,7 @@ with right:
             if not ordered: raise ValueError("Upload at least one scene image.")
             selected_audio=select_audio_source(voice_source,Path(st.session_state.audio_path) if st.session_state.audio_path else None,Path(st.session_state.generated_audio_path) if st.session_state.generated_audio_path else None)
             if not events: raise ValueError("Generate timestamps before rendering.")
-            from moviepy.editor import AudioFileClip
-            probe=AudioFileClip(str(selected_audio)); duration=probe.duration; probe.close()
+            duration=media_duration(selected_audio)
             timings=anchored_scene_timings([f.name for f in ordered],anchor_indices,events,duration) if timing_mode=="Word-anchored timing" else equal_scene_timings([f.name for f in ordered],duration)
             scene_paths=[]
             for i,file in enumerate(ordered): p=TEMP_DIR/f"scene-{i}-{safe_name(file.name)}"; p.write_bytes(file.getvalue()); scene_paths.append(p)

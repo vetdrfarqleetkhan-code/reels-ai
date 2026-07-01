@@ -5,13 +5,11 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
-import numpy as np
 from PIL import Image
 
 from .alignment import CaptionEvent
-from .captions import draw_caption, event_at
 from .planning import SceneTiming, validate_scene_timings
-from .utils import FPS, VIDEO_HEIGHT, VIDEO_WIDTH, configure_moviepy, cover_crop, ffmpeg_executable
+from .utils import FPS, VIDEO_HEIGHT, VIDEO_WIDTH, cover_crop, ffmpeg_executable, media_duration
 
 RENDER_CONFIG = {"codec": "libx264", "audio_codec": "aac", "fps": FPS, "ffmpeg_params": ["-pix_fmt", "yuv420p"], "logger": None}
 
@@ -81,14 +79,7 @@ def render_reel_fast(
     music = Path(music).resolve() if music else None
     if len(scene_paths) != len(timings):
         raise ValueError("Every uploaded image must have one scene timing.")
-    configure_moviepy()
-    from moviepy.editor import AudioFileClip
-
-    probe = AudioFileClip(str(voiceover))
-    try:
-        voice_duration = probe.duration
-    finally:
-        probe.close()
+    voice_duration = media_duration(voiceover)
     validate_scene_timings(timings, voice_duration)
     intro = thumbnail_duration if thumbnail else 0.0
     total_duration = voice_duration + intro
@@ -182,84 +173,6 @@ def render_reel_fast(
             raise RuntimeError(f"FFmpeg rendering failed: {details.strip()}")
         progress("Complete", 1.0)
         return output
-
-
-def _motion_frame(base: Image.Image, t: float, duration: float, intensity: str, pattern: int) -> Image.Image:
-    strength = {"None": 0.0, "Low": .025, "Medium": .055, "High": .09}.get(intensity, .055)
-    progress = min(1.0, max(0.0, t / max(duration, .001)))
-    if pattern % 2: progress = 1 - progress
-    zoom = 1 + strength * progress
-    w, h = round(VIDEO_WIDTH * zoom), round(VIDEO_HEIGHT * zoom)
-    moved = base.resize((w, h), Image.Resampling.LANCZOS)
-    pan_x = round((w - VIDEO_WIDTH) * ((pattern % 3) / 2 if w > VIDEO_WIDTH else 0))
-    pan_y = (h - VIDEO_HEIGHT) // 2
-    return moved.crop((pan_x, pan_y, pan_x + VIDEO_WIDTH, pan_y + VIDEO_HEIGHT))
-
-
-def render_reel(
-    scene_paths: list[Path], timings: list[SceneTiming], voiceover: Path, events: list[CaptionEvent],
-    output: Path, caption_settings: dict, motion: str = "Medium", transition: str = "Crossfade",
-    thumbnail: Path | None = None, thumbnail_duration: float = .5, music: Path | None = None,
-    music_volume: float = .10, caption_offset: float = 0.0, progress: Callable[[str, float], None] | None = None,
-) -> Path:
-    configure_moviepy()
-    from moviepy.audio.fx.all import audio_fadein, audio_fadeout, audio_loop
-    from moviepy.editor import AudioFileClip, CompositeAudioClip, CompositeVideoClip, VideoClip, concatenate_videoclips
-
-    progress = progress or (lambda _message, _value: None)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if len(scene_paths) != len(timings): raise ValueError("Every uploaded image must have one scene timing.")
-    audio = music_clip = final_audio = final = None
-    clips = []
-    try:
-        progress("Reading voiceover", .08)
-        audio = AudioFileClip(str(voiceover))
-        validate_scene_timings(timings, audio.duration)
-        intro = thumbnail_duration if thumbnail else 0.0
-        progress("Building scenes", .20)
-        for index, (path, timing) in enumerate(zip(scene_paths, timings)):
-            base = cover_crop(Image.open(path))
-            duration = timing.duration
-            def make_frame(t, b=base, d=duration, p=index, start=timing.start):
-                frame = _motion_frame(b, t, d, motion, p)
-                event = event_at(events, start + t, caption_offset)
-                if event: frame = draw_caption(frame, event.token, caption_settings)
-                return np.asarray(frame)
-            clip = VideoClip(make_frame=make_frame, duration=duration)
-            if transition in {"Crossfade", "Fade", "Cinematic reveal"} and index:
-                clip = clip.crossfadein(min(.25, duration / 4))
-            clips.append(clip)
-        main = concatenate_videoclips(clips, method="compose")
-        if thumbnail:
-            thumb_base = cover_crop(Image.open(thumbnail))
-            thumb = VideoClip(lambda _t, b=thumb_base: np.asarray(b), duration=thumbnail_duration)
-            clips.append(thumb)
-            video = concatenate_videoclips([thumb, main], method="compose")
-        else:
-            video = main
-        progress("Mixing audio", .55)
-        delayed_voice = audio.set_start(intro)
-        tracks = [delayed_voice]
-        if music:
-            music_clip = AudioFileClip(str(music)).volumex(music_volume)
-            target = video.duration
-            if music_clip.duration < target: music_clip = audio_loop(music_clip, duration=target)
-            else: music_clip = music_clip.subclip(0, target)
-            music_clip = audio_fadeout(audio_fadein(music_clip, min(1.0, target/4)), min(1.0, target/4))
-            tracks.insert(0, music_clip)
-        final_audio = CompositeAudioClip(tracks).set_duration(video.duration)
-        final = video.set_audio(final_audio).set_fps(FPS)
-        progress("Exporting video", .70)
-        with tempfile.TemporaryDirectory(prefix="reels_ai_") as tmp:
-            temp_audio = str(Path(tmp) / "render-audio.m4a")
-            final.write_videofile(str(output), temp_audiofile=temp_audio, remove_temp=True, **RENDER_CONFIG)
-        progress("Complete", 1.0)
-        return output
-    finally:
-        for resource in [final, final_audio, music_clip, audio, *clips]:
-            try:
-                if resource is not None: resource.close()
-            except Exception: pass
 
 
 def select_audio_source(source: str, uploaded: Path | None, generated: Path | None) -> Path:
