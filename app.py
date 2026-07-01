@@ -108,8 +108,15 @@ with left:
 
     selected_audio_value = st.session_state.audio_path if voice_source == "Upload voiceover" else st.session_state.generated_audio_path
     audio_path = Path(selected_audio_value) if selected_audio_value else None
-    if st.button("Generate timestamps", type="primary", disabled=not(original_script_text and audio_path)):
+    audio_ready = bool(audio_path and audio_path.is_file())
+    if audio_ready and not original_script_text:
+        st.info("Voiceover ready. Add or upload the script in section 1, then generate timestamps.")
+    elif not audio_ready:
+        st.caption("Upload or generate a voiceover to activate timestamp generation.")
+    if st.button("Generate timestamps", type="primary", disabled=not audio_ready):
         try:
+            if not original_script_text:
+                raise ValueError("Add or upload a script before generating timestamps.")
             with st.status("Preparing transcription…") as status:
                 def transcription_progress(message: str) -> None:
                     status.update(label=message)
