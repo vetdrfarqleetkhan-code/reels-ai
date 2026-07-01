@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: reels-ai
+    runtime: docker
+    healthCheckPath: /_stcore/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9

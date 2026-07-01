@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Generated and user-uploaded data must not be published.
+output/*
+!output/.gitkeep
+temp/*
+!temp/.gitkeep
+projects/*
+!projects/.gitkeep
+
+# The Whisper model is downloaded automatically on first use and is too large
+# for a normal GitHub commit.
+models/faster-whisper-*/
+
+.env
+.streamlit/secrets.toml
+*.log

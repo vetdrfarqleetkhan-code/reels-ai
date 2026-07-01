@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+output/*
+temp/*
+projects/*
+models/faster-whisper-*
+tests
+*.bat
+*.log
